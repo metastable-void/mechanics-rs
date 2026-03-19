@@ -82,11 +82,24 @@ fn has_json_content_type(req: &Request<Incoming>) -> bool {
         .unwrap_or(false)
 }
 
+fn parse_bearer_token(header_value: &str) -> Option<&str> {
+    let mut parts = header_value.split_whitespace();
+    let scheme = parts.next()?;
+    if !scheme.eq_ignore_ascii_case("bearer") {
+        return None;
+    }
+    let token = parts.next()?;
+    if token.is_empty() || parts.next().is_some() {
+        return None;
+    }
+    Some(token)
+}
+
 fn bearer_token(req: &Request<Incoming>) -> Option<&str> {
     req.headers()
         .get(AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "))
+        .and_then(parse_bearer_token)
 }
 
 fn is_authorized(tokens: &RwLock<HashSet<String>>, req: &Request<Incoming>) -> bool {
@@ -165,9 +178,16 @@ impl MechanicsServer {
         })
     }
 
-    /// Adds an approved Bearer token to this server
+    /// Adds an approved Bearer token to this server.
+    ///
+    /// Empty or whitespace-only tokens are ignored.
     pub fn add_token(&self, token: String) {
-        self.tokens.write().insert(token);
+        let token = token.trim();
+        if token.is_empty() {
+            return;
+        }
+
+        self.tokens.write().insert(token.to_string());
     }
 
     /// Returns a clone of the internal shared pool handle.
@@ -221,5 +241,31 @@ impl MechanicsServer {
             })?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_bearer_token;
+
+    #[test]
+    fn parse_bearer_token_accepts_case_insensitive_scheme() {
+        assert_eq!(parse_bearer_token("Bearer abc"), Some("abc"));
+        assert_eq!(parse_bearer_token("bearer abc"), Some("abc"));
+        assert_eq!(parse_bearer_token("BEARER abc"), Some("abc"));
+    }
+
+    #[test]
+    fn parse_bearer_token_accepts_flexible_whitespace() {
+        assert_eq!(parse_bearer_token("  Bearer   abc  "), Some("abc"));
+        assert_eq!(parse_bearer_token("\tBearer\tabc\t"), Some("abc"));
+    }
+
+    #[test]
+    fn parse_bearer_token_rejects_invalid_values() {
+        assert_eq!(parse_bearer_token("Basic abc"), None);
+        assert_eq!(parse_bearer_token("Bearer"), None);
+        assert_eq!(parse_bearer_token("Bearer "), None);
+        assert_eq!(parse_bearer_token("Bearer abc def"), None);
     }
 }

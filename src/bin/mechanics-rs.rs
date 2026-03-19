@@ -10,14 +10,23 @@ fn main() -> std::io::Result<Infallible> {
             .unwrap_or(SocketAddr::from(([127, 0, 0, 1], 3001)));
     let config = MechanicsPoolConfig::default();
     let server = MechanicsServer::new(config)?;
+    let mut token_count = 0usize;
     if let Ok(tokens) = std::env::var("MECHANICS_ALLOWED_TOKENS") {
         for token in tokens.split(',').map(str::trim).filter(|t| !t.is_empty()) {
             server.add_token(token.to_string());
+            token_count += 1;
         }
     }
     server.run(bind_addr)?;
     println!("Running mechanics server on {}", bind_addr);
-    
+    if token_count == 0 {
+        println!(
+            "No tokens configured via MECHANICS_ALLOWED_TOKENS. Requests will be denied until tokens are added."
+        );
+    } else {
+        println!("Loaded {} bearer token(s).", token_count);
+    }
+
     loop {
         std::thread::park();
     }
