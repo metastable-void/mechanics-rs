@@ -1240,6 +1240,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "mechanics-core",
+ "parking_lot",
  "serde_json",
  "tokio",
 ]

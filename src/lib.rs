@@ -1,10 +1,13 @@
+use std::collections::HashSet;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use parking_lot::RwLock;
+
 use http_body_util::{BodyExt, Full};
 use hyper::body::{Bytes, Incoming};
-use hyper::header::CONTENT_TYPE;
+use hyper::header::{AUTHORIZATION, CONTENT_TYPE, WWW_AUTHENTICATE};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
@@ -12,12 +15,15 @@ use hyper_util::rt::TokioIo;
 use mechanics_core::job::MechanicsJob;
 use tokio::net::TcpListener;
 
-use mechanics_core::{MechanicsPool, MechanicsPoolConfig};
+use mechanics_core::MechanicsPool;
+
+pub use mechanics_core::MechanicsPoolConfig;
 
 type HttpResponse = Response<Full<Bytes>>;
 
 enum ApiError {
     NotFound,
+    Unauthorized,
     InvalidType,
     InvalidRequest,
     Pool(String),
@@ -28,6 +34,7 @@ impl ApiError {
     fn to_response(&self) -> HttpResponse {
         let (status, message) = match self {
             Self::NotFound => (StatusCode::NOT_FOUND, "Not found".to_string()),
+            Self::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()),
             Self::InvalidType => (StatusCode::BAD_REQUEST, "Invalid type".to_string()),
             Self::InvalidRequest => (StatusCode::BAD_REQUEST, "Invalid request".to_string()),
             Self::Pool(err) => (StatusCode::BAD_REQUEST, err.clone()),
@@ -37,7 +44,15 @@ impl ApiError {
             ),
         };
 
-        json_response(status, &serde_json::json!({ "error": message }))
+        let mut response = json_response(status, &serde_json::json!({ "error": message }));
+        if matches!(self, Self::Unauthorized) {
+            response.headers_mut().insert(
+                WWW_AUTHENTICATE,
+                hyper::header::HeaderValue::from_static("Bearer"),
+            );
+        }
+
+        response
     }
 }
 
@@ -67,6 +82,20 @@ fn has_json_content_type(req: &Request<Incoming>) -> bool {
         .unwrap_or(false)
 }
 
+fn bearer_token(req: &Request<Incoming>) -> Option<&str> {
+    req.headers()
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.strip_prefix("Bearer "))
+}
+
+fn is_authorized(tokens: &RwLock<HashSet<String>>, req: &Request<Incoming>) -> bool {
+    let Some(token) = bearer_token(req) else {
+        return false;
+    };
+    tokens.read().contains(token)
+}
+
 async fn parse_json_job(req: Request<Incoming>) -> Result<MechanicsJob, ApiError> {
     if !has_json_content_type(&req) {
         return Err(ApiError::InvalidType);
@@ -93,10 +122,14 @@ async fn execute_job(
 
 async fn handle_request(
     pool: Arc<MechanicsPool>,
+    tokens: Arc<RwLock<HashSet<String>>>,
     req: Request<Incoming>,
 ) -> Result<HttpResponse, Infallible> {
     if req.method() != Method::POST || req.uri().path() != "/api/v1/mechanics" {
         return Ok(ApiError::NotFound.to_response());
+    }
+    if !is_authorized(&tokens, &req) {
+        return Ok(ApiError::Unauthorized.to_response());
     }
 
     let job = match parse_json_job(req).await {
@@ -117,6 +150,7 @@ async fn handle_request(
 /// `POST /api/v1/mechanics` with a JSON [`MechanicsJob`] payload.
 pub struct MechanicsServer {
     pool: Arc<MechanicsPool>,
+    tokens: Arc<RwLock<HashSet<String>>>,
 }
 
 impl MechanicsServer {
@@ -125,7 +159,15 @@ impl MechanicsServer {
     /// Returns an I/O error when the underlying pool creation fails.
     pub fn new(config: MechanicsPoolConfig) -> std::io::Result<Self> {
         let pool = Arc::new(MechanicsPool::new(config).map_err(std::io::Error::other)?);
-        Ok(Self { pool })
+        Ok(Self {
+            pool,
+            tokens: Arc::new(RwLock::default()),
+        })
+    }
+
+    /// Adds an approved Bearer token to this server
+    pub fn add_token(&self, token: String) {
+        self.tokens.write().insert(token);
     }
 
     /// Returns a clone of the internal shared pool handle.
@@ -159,9 +201,12 @@ impl MechanicsServer {
                         let (stream, _) = listener.accept().await?;
                         let io = TokioIo::new(stream);
                         let pool = server.pool();
+                        let tokens = Arc::clone(&server.tokens);
 
                         tokio::task::spawn(async move {
-                            let service = service_fn(move |req| handle_request(pool.clone(), req));
+                            let service = service_fn(move |req| {
+                                handle_request(pool.clone(), Arc::clone(&tokens), req)
+                            });
                             if let Err(err) =
                                 http1::Builder::new().serve_connection(io, service).await
                             {
