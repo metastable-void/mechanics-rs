@@ -111,20 +111,35 @@ async fn handle_request(
 }
 
 #[derive(Clone)]
+/// HTTP server wrapper around a shared [`MechanicsPool`].
+///
+/// The server exposes a single endpoint:
+/// `POST /api/v1/mechanics` with a JSON [`MechanicsJob`] payload.
 pub struct MechanicsServer {
     pool: Arc<MechanicsPool>,
 }
 
 impl MechanicsServer {
+    /// Creates a new server with an initialized worker pool.
+    ///
+    /// Returns an I/O error when the underlying pool creation fails.
     pub fn new(config: MechanicsPoolConfig) -> std::io::Result<Self> {
         let pool = Arc::new(MechanicsPool::new(config).map_err(std::io::Error::other)?);
         Ok(Self { pool })
     }
 
-    pub fn pool(&self) -> Arc<MechanicsPool> {
+    /// Returns a clone of the internal shared pool handle.
+    pub(crate) fn pool(&self) -> Arc<MechanicsPool> {
         Arc::clone(&self.pool)
     }
 
+    /// Starts the HTTP server on `bind_addr` in a dedicated thread.
+    ///
+    /// This method is non-blocking from the caller perspective: it spawns the
+    /// runtime thread and returns once the listener setup succeeds.
+    ///
+    /// Returns an I/O error if binding the socket, configuring non-blocking
+    /// mode, or spawning the runtime thread fails.
     pub fn run(&self, bind_addr: SocketAddr) -> std::io::Result<()> {
         let std_listener = std::net::TcpListener::bind(bind_addr)?;
         std_listener.set_nonblocking(true)?;
