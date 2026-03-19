@@ -16,7 +16,8 @@ fn main() -> std::io::Result<Infallible> {
         }
     }
     server.run(bind_addr)?;
-
+    println!("Running mechanics server on {}", bind_addr);
+    
     loop {
         std::thread::park();
     }
