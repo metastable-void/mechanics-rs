@@ -1,14 +1,17 @@
 use std::convert::Infallible;
+use std::time::Duration;
 use std::{net::SocketAddr, str::FromStr};
 
 use mechanics::MechanicsPoolConfig;
 use mechanics::MechanicsServer;
+use mechanics_core::job::MechanicsExecutionLimits;
 
 fn main() -> std::io::Result<Infallible> {
     let bind_addr: SocketAddr =
         SocketAddr::from_str(&std::env::var("LISTEN_ADDR").unwrap_or("".to_string()))
             .unwrap_or(SocketAddr::from(([127, 0, 0, 1], 3001)));
-    let config = MechanicsPoolConfig::default();
+    let mut config = MechanicsPoolConfig::default();
+    config = config.with_execution_limits(MechanicsExecutionLimits::new(Duration::from_secs(60), 65536, 65536, 131072).map_err(std::io::Error::other)?);
     let server = MechanicsServer::new(config)?;
     let mut token_count = 0usize;
     if let Ok(tokens) = std::env::var("MECHANICS_ALLOWED_TOKENS") {
