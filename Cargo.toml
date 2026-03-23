@@ -13,7 +13,7 @@ keywords = ["automation", "orchestration", "javascript", "worker-pool", "boa"]
 categories = ["concurrency", "artificial-intelligence", "api-bindings"]
 
 [dependencies]
-mechanics-core = "0.2.0"
+mechanics-core = "0.2.1"
 hyper = { version = "1", features = ["full"] }
 tokio = { version = "1", features = ["full"] }
 http-body-util = "0.1"

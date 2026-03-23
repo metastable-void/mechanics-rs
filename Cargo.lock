@@ -528,7 +528,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1247,9 +1247,9 @@ dependencies = [
 
 [[package]]
 name = "mechanics-core"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4efa704763ca2032fa6b1861a2cc676a866ee21507aec1aa020893fd5d71d652"
+checksum = "fa68ee556aa2b604165fc026475f410c0fcc54e670d776d60c166b468eae3490"
 dependencies = [
  "boa_engine",
  "boa_gc",
