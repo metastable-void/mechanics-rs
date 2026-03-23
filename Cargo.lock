@@ -1247,9 +1247,9 @@ dependencies = [
 
 [[package]]
 name = "mechanics-core"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa68ee556aa2b604165fc026475f410c0fcc54e670d776d60c166b468eae3490"
+checksum = "68ac673d0db7f239703166340fbced8b835742815553cdb898122c2a3307160f"
 dependencies = [
  "boa_engine",
  "boa_gc",
