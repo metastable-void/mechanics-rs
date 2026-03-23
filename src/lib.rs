@@ -210,7 +210,7 @@ impl MechanicsServer {
         std::thread::Builder::new()
             .name("MechanicsServer".to_string())
             .spawn(move || {
-                let rt = tokio::runtime::Builder::new_current_thread()
+                let rt = tokio::runtime::Builder::new_multi_thread()
                     .enable_all()
                     .build()?;
 
