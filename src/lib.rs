@@ -270,11 +270,7 @@ impl MechanicsServer {
     /// the certificate chain and private key from `tls_config`, and
     /// negotiates HTTP/1.1 or HTTP/2 via ALPN.
     #[cfg(feature = "https")]
-    pub fn run_tls(
-        &self,
-        bind_addr: SocketAddr,
-        tls_config: TlsConfig,
-    ) -> std::io::Result<()> {
+    pub fn run_tls(&self, bind_addr: SocketAddr, tls_config: TlsConfig) -> std::io::Result<()> {
         let acceptor = tls_config.into_acceptor()?;
 
         let std_listener = std::net::TcpListener::bind(bind_addr)?;

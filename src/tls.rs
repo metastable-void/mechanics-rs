@@ -2,10 +2,10 @@ use std::io;
 use std::sync::Arc;
 
 use tokio::net::TcpStream;
-use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use tokio_rustls::rustls::ServerConfig;
-use tokio_rustls::server::TlsStream;
 use tokio_rustls::TlsAcceptor;
+use tokio_rustls::rustls::ServerConfig;
+use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use tokio_rustls::server::TlsStream;
 
 /// TLS configuration for [`super::MechanicsServer::run_tls`].
 ///
@@ -24,10 +24,9 @@ impl TlsConfig {
     /// (leaf first, then intermediates). `key_pem` should contain a
     /// single PEM-encoded private key (PKCS#8 or SEC1/EC or RSA).
     pub fn from_pem(cert_pem: &[u8], key_pem: &[u8]) -> io::Result<Self> {
-        let cert_chain: Vec<CertificateDer<'static>> = rustls_pemfile::certs(
-            &mut io::BufReader::new(cert_pem),
-        )
-        .collect::<Result<Vec<_>, _>>()?;
+        let cert_chain: Vec<CertificateDer<'static>> =
+            rustls_pemfile::certs(&mut io::BufReader::new(cert_pem))
+                .collect::<Result<Vec<_>, _>>()?;
 
         if cert_chain.is_empty() {
             return Err(io::Error::new(
@@ -36,15 +35,13 @@ impl TlsConfig {
             ));
         }
 
-        let private_key = rustls_pemfile::private_key(
-            &mut io::BufReader::new(key_pem),
-        )?
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "no private key found in PEM data",
-            )
-        })?;
+        let private_key = rustls_pemfile::private_key(&mut io::BufReader::new(key_pem))?
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "no private key found in PEM data",
+                )
+            })?;
 
         Ok(Self {
             cert_chain,
@@ -71,10 +68,7 @@ pub(crate) struct Acceptor {
 }
 
 impl Acceptor {
-    pub(crate) async fn accept(
-        &self,
-        stream: TcpStream,
-    ) -> io::Result<TlsStream<TcpStream>> {
+    pub(crate) async fn accept(&self, stream: TcpStream) -> io::Result<TlsStream<TcpStream>> {
         self.inner.accept(stream).await
     }
 }
