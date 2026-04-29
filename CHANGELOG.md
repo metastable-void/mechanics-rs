@@ -9,6 +9,16 @@ this crate adheres to
 
 ## [Unreleased]
 
+- Added optional `https` Cargo feature: TLS support via rustls
+  (vendored crypto backend, no system OpenSSL headers) with
+  HTTP/1.1 + HTTP/2 ALPN negotiation. New public API:
+  `TlsConfig::from_pem(cert_pem, key_pem)` for PEM-encoded
+  certificates and private keys, and
+  `MechanicsServer::run_tls(bind_addr, tls_config)` which
+  starts the HTTPS server in a dedicated thread (mirrors
+  `run()` for plain HTTP). The existing `run()` method is
+  unchanged and works without the feature enabled.
+
 ## [0.3.0]
 
 - Bumped `mechanics-core` dep from `"0.2.2"` to `"0.3.0"`, following

@@ -13,6 +13,10 @@ homepage = "https://github.com/metastable-void/mechanics-rs"
 keywords = ["automation", "orchestration", "javascript", "worker-pool", "boa"]
 categories = ["concurrency", "artificial-intelligence", "api-bindings"]
 
+[features]
+default = []
+https = ["dep:tokio-rustls", "dep:rustls-pemfile"]
+
 [dependencies]
 mechanics-core = "0.3.0"
 hyper = { version = "1", features = ["full"] }
@@ -21,6 +25,9 @@ http-body-util = "0.1"
 hyper-util = { version = "0.1", features = ["full"] }
 serde_json = "1.0.149"
 parking_lot = "0.12.5"
+
+tokio-rustls = { version = "0.26", optional = true }
+rustls-pemfile = { version = "2", optional = true }
 
 [profile.release]
 opt-level = 3

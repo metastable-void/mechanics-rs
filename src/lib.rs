@@ -17,6 +17,12 @@ use tokio::net::TcpListener;
 
 use mechanics_core::MechanicsPool;
 
+#[cfg(feature = "https")]
+mod tls;
+
+#[cfg(feature = "https")]
+pub use tls::TlsConfig;
+
 pub use mechanics_core::MechanicsPoolConfig;
 
 type HttpResponse = Response<Full<Bytes>>;
@@ -195,7 +201,7 @@ impl MechanicsServer {
         Arc::clone(&self.pool)
     }
 
-    /// Starts the HTTP server on `bind_addr` in a dedicated thread.
+    /// Starts the plain-HTTP server on `bind_addr` in a dedicated thread.
     ///
     /// This method is non-blocking from the caller perspective: it spawns the
     /// runtime thread and returns once the listener setup succeeds.
@@ -231,6 +237,69 @@ impl MechanicsServer {
                                 http1::Builder::new().serve_connection(io, service).await
                             {
                                 eprintln!("Error serving connection: {err:?}");
+                            }
+                        });
+                    }
+
+                    #[allow(unreachable_code)]
+                    Ok::<_, std::io::Error>(())
+                })
+            })?;
+
+        Ok(())
+    }
+
+    /// Starts the HTTPS server on `bind_addr` in a dedicated thread.
+    ///
+    /// Requires the `https` feature. Accepts TLS connections using
+    /// the certificate chain and private key from `tls_config`, and
+    /// negotiates HTTP/1.1 or HTTP/2 via ALPN.
+    #[cfg(feature = "https")]
+    pub fn run_tls(
+        &self,
+        bind_addr: SocketAddr,
+        tls_config: TlsConfig,
+    ) -> std::io::Result<()> {
+        let acceptor = tls_config.into_acceptor()?;
+
+        let std_listener = std::net::TcpListener::bind(bind_addr)?;
+        std_listener.set_nonblocking(true)?;
+
+        let server = self.clone();
+        std::thread::Builder::new()
+            .name("MechanicsServer-tls".to_string())
+            .spawn(move || {
+                let rt = tokio::runtime::Builder::new_multi_thread()
+                    .enable_all()
+                    .build()?;
+
+                rt.block_on(async move {
+                    let listener = TcpListener::from_std(std_listener)?;
+
+                    loop {
+                        let (stream, _) = listener.accept().await?;
+                        let tls_stream = match acceptor.accept(stream).await {
+                            Ok(s) => s,
+                            Err(err) => {
+                                eprintln!("TLS handshake error: {err:?}");
+                                continue;
+                            }
+                        };
+                        let io = TokioIo::new(tls_stream);
+                        let pool = server.pool();
+                        let tokens = Arc::clone(&server.tokens);
+
+                        tokio::task::spawn(async move {
+                            let service = service_fn(move |req| {
+                                handle_request(pool.clone(), Arc::clone(&tokens), req)
+                            });
+                            if let Err(err) = hyper_util::server::conn::auto::Builder::new(
+                                hyper_util::rt::TokioExecutor::new(),
+                            )
+                            .serve_connection(io, service)
+                            .await
+                            {
+                                eprintln!("Error serving TLS connection: {err:?}");
                             }
                         });
                     }
