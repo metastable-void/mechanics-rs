@@ -196,6 +196,21 @@ impl MechanicsServer {
         self.tokens.write().insert(token.to_string());
     }
 
+    /// Replaces all approved Bearer tokens with the given set.
+    ///
+    /// Empty or whitespace-only tokens in the iterator are ignored.
+    pub fn replace_tokens<I>(&self, tokens: I)
+    where
+        I: IntoIterator<Item = String>,
+    {
+        let new: HashSet<String> = tokens
+            .into_iter()
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty())
+            .collect();
+        *self.tokens.write() = new;
+    }
+
     /// Returns a clone of the internal shared pool handle.
     pub(crate) fn pool(&self) -> Arc<MechanicsPool> {
         Arc::clone(&self.pool)
