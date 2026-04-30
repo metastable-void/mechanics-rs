@@ -248,8 +248,7 @@ impl MechanicsServer {
                             let service = service_fn(move |req| {
                                 handle_request(pool.clone(), Arc::clone(&tokens), req)
                             });
-                            let _ =
-                                http1::Builder::new().serve_connection(io, service).await;
+                            let _ = http1::Builder::new().serve_connection(io, service).await;
                         });
                     }
 
