@@ -24,10 +24,9 @@ impl TlsConfig {
     /// (leaf first, then intermediates). `key_pem` should contain a
     /// single PEM-encoded private key (PKCS#8 or SEC1/EC or RSA).
     pub fn from_pem(cert_pem: &[u8], key_pem: &[u8]) -> io::Result<Self> {
-        let cert_chain: Vec<CertificateDer<'static>> =
-            CertificateDer::pem_slice_iter(cert_pem)
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
+        let cert_chain: Vec<CertificateDer<'static>> = CertificateDer::pem_slice_iter(cert_pem)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
 
         if cert_chain.is_empty() {
             return Err(io::Error::new(
