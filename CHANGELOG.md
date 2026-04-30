@@ -9,6 +9,8 @@ this crate adheres to
 
 ## [Unreleased]
 
+## [0.4.0]
+
 - Added optional `https` Cargo feature: TLS support via rustls
   (vendored crypto backend, no system OpenSSL headers) with
   HTTP/1.1 + HTTP/2 ALPN negotiation. New public API:
