@@ -248,11 +248,8 @@ impl MechanicsServer {
                             let service = service_fn(move |req| {
                                 handle_request(pool.clone(), Arc::clone(&tokens), req)
                             });
-                            if let Err(err) =
-                                http1::Builder::new().serve_connection(io, service).await
-                            {
-                                eprintln!("Error serving connection: {err:?}");
-                            }
+                            let _ =
+                                http1::Builder::new().serve_connection(io, service).await;
                         });
                     }
 
@@ -291,10 +288,7 @@ impl MechanicsServer {
                         let (stream, _) = listener.accept().await?;
                         let tls_stream = match acceptor.accept(stream).await {
                             Ok(s) => s,
-                            Err(err) => {
-                                eprintln!("TLS handshake error: {err:?}");
-                                continue;
-                            }
+                            Err(_) => continue,
                         };
                         let io = TokioIo::new(tls_stream);
                         let pool = server.pool();
@@ -304,14 +298,11 @@ impl MechanicsServer {
                             let service = service_fn(move |req| {
                                 handle_request(pool.clone(), Arc::clone(&tokens), req)
                             });
-                            if let Err(err) = hyper_util::server::conn::auto::Builder::new(
+                            let _ = hyper_util::server::conn::auto::Builder::new(
                                 hyper_util::rt::TokioExecutor::new(),
                             )
                             .serve_connection(io, service)
-                            .await
-                            {
-                                eprintln!("Error serving TLS connection: {err:?}");
-                            }
+                            .await;
                         });
                     }
 
