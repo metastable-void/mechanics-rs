@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::net::TcpStream;
 use tokio_rustls::TlsAcceptor;
 use tokio_rustls::rustls::ServerConfig;
-use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use tokio_rustls::server::TlsStream;
 
 /// TLS configuration for [`super::MechanicsServer::run_tls`].
@@ -25,8 +25,9 @@ impl TlsConfig {
     /// single PEM-encoded private key (PKCS#8 or SEC1/EC or RSA).
     pub fn from_pem(cert_pem: &[u8], key_pem: &[u8]) -> io::Result<Self> {
         let cert_chain: Vec<CertificateDer<'static>> =
-            rustls_pemfile::certs(&mut io::BufReader::new(cert_pem))
-                .collect::<Result<Vec<_>, _>>()?;
+            CertificateDer::pem_slice_iter(cert_pem)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
 
         if cert_chain.is_empty() {
             return Err(io::Error::new(
@@ -35,13 +36,8 @@ impl TlsConfig {
             ));
         }
 
-        let private_key = rustls_pemfile::private_key(&mut io::BufReader::new(key_pem))?
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "no private key found in PEM data",
-                )
-            })?;
+        let private_key = PrivateKeyDer::from_pem_slice(key_pem)
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
 
         Ok(Self {
             cert_chain,
