@@ -110,6 +110,9 @@ fn bearer_token(req: &Request<Incoming>) -> Option<&str> {
         .and_then(parse_bearer_token)
 }
 
+/// An empty token set rejects every request (401). This is intentional:
+/// the operator must configure at least one token before the worker
+/// accepts any traffic.
 fn is_authorized(tokens: &RwLock<HashSet<String>>, req: &Request<Incoming>) -> bool {
     let Some(token) = bearer_token(req) else {
         return false;
