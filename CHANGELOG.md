@@ -9,6 +9,11 @@ this crate adheres to
 
 ## [Unreleased]
 
+## [0.4.1]
+
+- Added crate-level doc comment.
+- Added doc comment to the standalone binary.
+
 ## [0.4.0]
 
 - Added optional `https` Cargo feature: TLS support via rustls
