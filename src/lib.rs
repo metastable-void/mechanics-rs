@@ -1,3 +1,5 @@
+//! HTTP server wrapping a [`MechanicsPool`] worker pool.
+
 use std::collections::HashSet;
 use std::convert::Infallible;
 use std::net::SocketAddr;

@@ -1,3 +1,5 @@
+//! Standalone mechanics worker binary (development/testing).
+
 use std::convert::Infallible;
 use std::time::Duration;
 use std::{net::SocketAddr, str::FromStr};
