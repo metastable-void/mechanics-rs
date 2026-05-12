@@ -64,6 +64,22 @@ impl ApiError {
     }
 }
 
+/// Stamps `Strict-Transport-Security` on a response emitted by an
+/// HTTPS-served handler. `max-age=63072000` (2 years) matches the
+/// hstspreload.org minimum. `includeSubDomains` is intentionally
+/// omitted — consumers that want subdomain coverage can override at
+/// their reverse proxy. RFC 6797 §7.2 forbids HSTS on plain-HTTP
+/// responses, so this function is invoked only from the HTTPS serve
+/// path in `MechanicsServer::run_tls`.
+#[cfg(feature = "https")]
+fn with_hsts(mut response: HttpResponse) -> HttpResponse {
+    response.headers_mut().insert(
+        hyper::header::STRICT_TRANSPORT_SECURITY,
+        hyper::header::HeaderValue::from_static("max-age=63072000"),
+    );
+    response
+}
+
 fn json_response(status: StatusCode, value: &serde_json::Value) -> HttpResponse {
     let body = serde_json::to_vec(value).unwrap_or_else(|_| b"{}".to_vec());
 
@@ -300,7 +316,11 @@ impl MechanicsServer {
 
                         tokio::task::spawn(async move {
                             let service = service_fn(move |req| {
-                                handle_request(pool.clone(), Arc::clone(&tokens), req)
+                                let pool = pool.clone();
+                                let tokens = Arc::clone(&tokens);
+                                async move {
+                                    handle_request(pool, tokens, req).await.map(with_hsts)
+                                }
                             });
                             let _ = hyper_util::server::conn::auto::Builder::new(
                                 hyper_util::rt::TokioExecutor::new(),

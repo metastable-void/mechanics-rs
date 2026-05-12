@@ -9,6 +9,24 @@ this crate adheres to
 
 ## [Unreleased]
 
+## [0.4.2]
+
+- Hardened HTTPS server-side TLS posture (only relevant when the
+  `https` feature is enabled):
+  - Removed AES128-class cipher suites from the
+    `ServerConfig` cipher-suite list. Effective suites are now
+    AES256-GCM and CHACHA20-POLY1305 only (TLS 1.3 and TLS 1.2).
+    Other rustls defaults (key-exchange groups, signature
+    schemes, ALPN preferences) are unchanged.
+  - HTTPS responses now carry
+    `Strict-Transport-Security: max-age=63072000` (2 years,
+    matching the hstspreload.org minimum). `includeSubDomains`
+    is intentionally omitted so deployments that host
+    non-HTTPS services on adjacent subdomains aren't broken;
+    operators that want subdomain coverage can add it at the
+    upstream proxy. Per RFC 6797 §7.2 the header is only
+    emitted on the HTTPS serve path, never on plain HTTP.
+
 ## [0.4.1]
 
 - Added crate-level doc comment.

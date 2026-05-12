@@ -45,7 +45,10 @@ impl TlsConfig {
     }
 
     pub(crate) fn into_acceptor(self) -> io::Result<Acceptor> {
-        let mut config = ServerConfig::builder()
+        let provider = Arc::new(aes256_chacha20_only_provider());
+        let mut config = ServerConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?
             .with_no_client_auth()
             .with_single_cert(self.cert_chain, self.private_key)
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
@@ -56,6 +59,18 @@ impl TlsConfig {
             inner: TlsAcceptor::from(Arc::new(config)),
         })
     }
+}
+
+/// Build a rustls CryptoProvider that's the aws-lc-rs default minus
+/// every AES128-class cipher suite. Leaves AES256 and CHACHA20 suites
+/// (TLS 1.3 and TLS 1.2) untouched. Other provider defaults (KX groups,
+/// signature schemes, etc.) are unchanged.
+fn aes256_chacha20_only_provider() -> tokio_rustls::rustls::crypto::CryptoProvider {
+    let mut provider = tokio_rustls::rustls::crypto::aws_lc_rs::default_provider();
+    provider
+        .cipher_suites
+        .retain(|suite| !format!("{:?}", suite.suite()).contains("AES_128"));
+    provider
 }
 
 pub(crate) struct Acceptor {
