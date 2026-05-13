@@ -9,6 +9,15 @@ this crate adheres to
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-13
+
+Changed (breaking): bumped to `mechanics-core = "0.5"`, which renames
+`ReqwestEndpointHttpClient` → `DefaultEndpointHttpClient` and switches
+the default endpoint HTTP transport from `reqwest` to
+`mechanics-http-client` (hyper-rustls + webpki-roots + aws-lc-rs).
+Consumers that wired a custom `endpoint_http_client` need to update
+the type name and the underlying client constructor.
+
 ## [0.4.2]
 
 - Hardened HTTPS server-side TLS posture (only relevant when the

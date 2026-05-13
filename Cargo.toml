@@ -1,6 +1,6 @@
 [package]
 name = "mechanics"
-version = "0.4.2"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.88"
 
@@ -18,7 +18,7 @@ default = []
 https = ["dep:tokio-rustls"]
 
 [dependencies]
-mechanics-core = "0.3.0"
+mechanics-core = "0.5"
 hyper = { version = "1", features = ["full"] }
 tokio = { version = "1", features = ["full"] }
 http-body-util = "0.1"
