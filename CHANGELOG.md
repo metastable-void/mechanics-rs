@@ -21,7 +21,13 @@ this crate adheres to
   made it into the consumer; the broken release shipped to
   crates.io and is superseded by this patch.
 
-## [0.5.2] - 2026-05-14
+## [0.5.2] - 2026-05-14 [YANKED]
+
+**Yanked on 2026-05-14.** The `handle_h3_request` signature in
+this release (`Request<()>`) is incompatible with `mhs 0.1.3`'s
+`Http3Server::start` service contract, which requires
+`Request<H3RequestBody>`. Downstream consumers building against
+the latest `mhs 0.1.x` hit `E0631`. Superseded by `0.5.3`.
 
 ### Added
 - Added `MechanicsServer::run_tls_with_h3`, which starts an
