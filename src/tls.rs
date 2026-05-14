@@ -45,6 +45,28 @@ impl TlsConfig {
     }
 
     pub(crate) fn into_acceptor(self) -> io::Result<Acceptor> {
+        self.into_acceptor_inner().map(|(acceptor, _, _)| acceptor)
+    }
+
+    pub(crate) fn into_acceptor_and_h3_material(
+        self,
+    ) -> io::Result<(
+        Acceptor,
+        Vec<CertificateDer<'static>>,
+        PrivateKeyDer<'static>,
+    )> {
+        self.into_acceptor_inner()
+    }
+
+    fn into_acceptor_inner(
+        self,
+    ) -> io::Result<(
+        Acceptor,
+        Vec<CertificateDer<'static>>,
+        PrivateKeyDer<'static>,
+    )> {
+        let h3_cert_chain = self.cert_chain.clone();
+        let h3_private_key = self.private_key.clone_key();
         let provider = Arc::new(aes256_chacha20_only_provider());
         let mut config = ServerConfig::builder_with_provider(provider)
             .with_safe_default_protocol_versions()
@@ -55,9 +77,13 @@ impl TlsConfig {
 
         config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
 
-        Ok(Acceptor {
-            inner: TlsAcceptor::from(Arc::new(config)),
-        })
+        Ok((
+            Acceptor {
+                inner: TlsAcceptor::from(Arc::new(config)),
+            },
+            h3_cert_chain,
+            h3_private_key,
+        ))
     }
 }
 

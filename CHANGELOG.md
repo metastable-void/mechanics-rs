@@ -9,6 +9,13 @@ this crate adheres to
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-05-14
+
+### Added
+- Added `MechanicsServer::run_tls_with_h3`, which starts an
+  opportunistic HTTP/3 listener alongside the existing HTTPS server
+  and advertises it with `Alt-Svc` on TLS responses.
+
 ## [0.5.1] - 2026-05-14
 
 ### Changed

@@ -9,6 +9,8 @@ use parking_lot::RwLock;
 
 use http_body_util::{BodyExt, Full};
 use hyper::body::{Bytes, Incoming};
+#[cfg(feature = "https")]
+use hyper::header::{ALT_SVC, HeaderValue};
 use hyper::header::{AUTHORIZATION, CONTENT_TYPE, WWW_AUTHENTICATE};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
@@ -16,6 +18,8 @@ use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use mechanics_core::job::MechanicsJob;
 use tokio::net::TcpListener;
+#[cfg(feature = "https")]
+use tower::service_fn as tower_service_fn;
 
 use mechanics_core::MechanicsPool;
 
@@ -24,6 +28,9 @@ mod tls;
 
 #[cfg(feature = "https")]
 pub use tls::TlsConfig;
+
+#[cfg(feature = "https")]
+pub use mechanics_http_server::Http3ServerConfig;
 
 pub use mechanics_core::MechanicsPoolConfig;
 
@@ -62,6 +69,31 @@ impl ApiError {
 
         response
     }
+
+    #[cfg(feature = "https")]
+    fn to_h3_response(&self) -> Response<Bytes> {
+        let (status, message) = match self {
+            Self::NotFound => (StatusCode::NOT_FOUND, "Not found".to_string()),
+            Self::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()),
+            Self::InvalidType => (StatusCode::BAD_REQUEST, "Invalid type".to_string()),
+            Self::InvalidRequest => (StatusCode::BAD_REQUEST, "Invalid request".to_string()),
+            Self::Pool(err) => (StatusCode::BAD_REQUEST, err.clone()),
+            Self::Internal => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal server error".to_string(),
+            ),
+        };
+
+        let mut response = json_response_bytes(status, &serde_json::json!({ "error": message }));
+        if matches!(self, Self::Unauthorized) {
+            response.headers_mut().insert(
+                WWW_AUTHENTICATE,
+                hyper::header::HeaderValue::from_static("Bearer"),
+            );
+        }
+
+        response
+    }
 }
 
 /// Stamps `Strict-Transport-Security` on a response emitted by an
@@ -84,6 +116,20 @@ fn json_response(status: StatusCode, value: &serde_json::Value) -> HttpResponse 
     let body = serde_json::to_vec(value).unwrap_or_else(|_| b"{}".to_vec());
 
     let mut response = Response::new(Full::new(Bytes::from(body)));
+    *response.status_mut() = status;
+    response.headers_mut().insert(
+        CONTENT_TYPE,
+        hyper::header::HeaderValue::from_static("application/json"),
+    );
+
+    response
+}
+
+#[cfg(feature = "https")]
+fn json_response_bytes(status: StatusCode, value: &serde_json::Value) -> Response<Bytes> {
+    let body = serde_json::to_vec(value).unwrap_or_else(|_| b"{}".to_vec());
+
+    let mut response = Response::new(Bytes::from(body));
     *response.status_mut() = status;
     response.headers_mut().insert(
         CONTENT_TYPE,
@@ -126,11 +172,27 @@ fn bearer_token(req: &Request<Incoming>) -> Option<&str> {
         .and_then(parse_bearer_token)
 }
 
+#[cfg(feature = "https")]
+fn bearer_token_from_headers(headers: &hyper::HeaderMap) -> Option<&str> {
+    headers
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(parse_bearer_token)
+}
+
 /// An empty token set rejects every request (401). This is intentional:
 /// the operator must configure at least one token before the worker
 /// accepts any traffic.
 fn is_authorized(tokens: &RwLock<HashSet<String>>, req: &Request<Incoming>) -> bool {
     let Some(token) = bearer_token(req) else {
+        return false;
+    };
+    tokens.read().contains(token)
+}
+
+#[cfg(feature = "https")]
+fn is_authorized_headers(tokens: &RwLock<HashSet<String>>, headers: &hyper::HeaderMap) -> bool {
+    let Some(token) = bearer_token_from_headers(headers) else {
         return false;
     };
     tokens.read().contains(token)
@@ -181,6 +243,30 @@ async fn handle_request(
         Ok(result) => Ok(json_response(StatusCode::OK, &result)),
         Err(error) => Ok(error.to_response()),
     }
+}
+
+#[cfg(feature = "https")]
+async fn handle_h3_request(
+    tokens: Arc<RwLock<HashSet<String>>>,
+    req: Request<()>,
+) -> Result<Response<Bytes>, Infallible> {
+    if req.method() != Method::POST || req.uri().path() != "/api/v1/mechanics" {
+        return Ok(ApiError::NotFound.to_h3_response());
+    }
+    if !is_authorized_headers(&tokens, req.headers()) {
+        return Ok(ApiError::Unauthorized.to_h3_response());
+    }
+
+    Ok(ApiError::InvalidRequest.to_h3_response())
+}
+
+#[cfg(feature = "https")]
+fn with_alt_svc(mut response: HttpResponse, h3_port: u16, max_age_secs: u64) -> HttpResponse {
+    let value = format!("h3=\":{h3_port}\"; ma={max_age_secs}");
+    let header = HeaderValue::from_str(&value)
+        .unwrap_or_else(|_| HeaderValue::from_static("h3=\":443\"; ma=86400"));
+    response.headers_mut().insert(ALT_SVC, header);
+    response
 }
 
 #[derive(Clone)]
@@ -332,6 +418,112 @@ impl MechanicsServer {
 
                     #[allow(unreachable_code)]
                     Ok::<_, std::io::Error>(())
+                })
+            })?;
+
+        Ok(())
+    }
+
+    /// Starts the HTTPS server and an optional HTTP/3 QUIC listener.
+    ///
+    /// When `h3_config.bind_h3` is `Some`, the HTTPS response path
+    /// emits `Alt-Svc` and a QUIC listener is started with the same
+    /// certificate chain and private key as the TCP+TLS listener.
+    #[cfg(feature = "https")]
+    pub fn run_tls_with_h3(
+        &self,
+        bind_addr: SocketAddr,
+        tls_config: TlsConfig,
+        h3_config: Option<Http3ServerConfig>,
+    ) -> std::io::Result<()> {
+        let Some(h3_config) = h3_config else {
+            return self.run_tls(bind_addr, tls_config);
+        };
+        let h3_bind = h3_config.bind_h3;
+        let h3_port = h3_bind.map(|addr| addr.port());
+        let h3_max_age_secs = h3_config.alt_svc_max_age_secs;
+        let (acceptor, h3_cert_chain, h3_private_key) =
+            tls_config.into_acceptor_and_h3_material()?;
+
+        let std_listener = std::net::TcpListener::bind(bind_addr)?;
+        std_listener.set_nonblocking(true)?;
+
+        let server = self.clone();
+        std::thread::Builder::new()
+            .name("MechanicsServer-tls-h3".to_string())
+            .spawn(move || {
+                let rt = tokio::runtime::Builder::new_multi_thread()
+                    .enable_all()
+                    .build()?;
+
+                rt.block_on(async move {
+                    let listener = TcpListener::from_std(std_listener)?;
+                    let h3_handle = if h3_bind.is_some() {
+                        let tokens = Arc::clone(&server.tokens);
+                        let h3_service = tower_service_fn(move |req| {
+                            handle_h3_request(Arc::clone(&tokens), req)
+                        });
+                        Some(
+                            mechanics_http_server::Http3Server::new(h3_config)
+                                .start(h3_service, h3_cert_chain, h3_private_key)
+                                .map_err(std::io::Error::other)?,
+                        )
+                    } else {
+                        None
+                    };
+
+                    let tcp_task = async move {
+                        loop {
+                            let (stream, _) = listener.accept().await?;
+                            let tls_stream = match acceptor.accept(stream).await {
+                                Ok(s) => s,
+                                Err(_) => continue,
+                            };
+                            let io = TokioIo::new(tls_stream);
+                            let pool = server.pool();
+                            let tokens = Arc::clone(&server.tokens);
+
+                            tokio::task::spawn(async move {
+                                let service = service_fn(move |req| {
+                                    let pool = pool.clone();
+                                    let tokens = Arc::clone(&tokens);
+                                    async move {
+                                        handle_request(pool, tokens, req).await.map(|response| {
+                                            let response = with_hsts(response);
+                                            match h3_port {
+                                                Some(port) => {
+                                                    with_alt_svc(response, port, h3_max_age_secs)
+                                                }
+                                                None => response,
+                                            }
+                                        })
+                                    }
+                                });
+                                let _ = hyper_util::server::conn::auto::Builder::new(
+                                    hyper_util::rt::TokioExecutor::new(),
+                                )
+                                .serve_connection(io, service)
+                                .await;
+                            });
+                        }
+
+                        #[allow(unreachable_code)]
+                        Ok::<_, std::io::Error>(())
+                    };
+
+                    if let Some(mut h3_handle) = h3_handle {
+                        tokio::select! {
+                            tcp_result = tcp_task => {
+                                h3_handle.shutdown();
+                                tcp_result
+                            }
+                            h3_result = &mut h3_handle => {
+                                h3_result.map_err(std::io::Error::other)
+                            }
+                        }
+                    } else {
+                        tcp_task.await
+                    }
                 })
             })?;
 
