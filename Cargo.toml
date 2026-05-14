@@ -1,6 +1,6 @@
 [package]
 name = "mechanics"
-version = "0.5.3"
+version = "0.5.4"
 edition = "2024"
 rust-version = "1.88"
 
@@ -14,11 +14,11 @@ keywords = ["automation", "orchestration", "javascript", "worker-pool", "boa"]
 categories = ["concurrency", "artificial-intelligence", "api-bindings"]
 
 [features]
-default = []
+default = ["https"]
 https = ["dep:mechanics-http-server", "dep:tokio-rustls"]
 
 [dependencies]
-mechanics-core = "0.6"
+mechanics-core = { version = "0.6", default-features = false, features = ["rand", "encoding", "html", "console", "url", "mime"] }
 hyper = { version = "1", default-features = false, features = ["http1", "http2", "server"] }
 tokio = { version = "1", default-features = false, features = ["net", "rt-multi-thread"] }
 tower = { version = "0.5", default-features = false, features = ["util"] }

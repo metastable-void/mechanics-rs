@@ -71,7 +71,7 @@ impl ApiError {
     }
 
     #[cfg(feature = "https")]
-    fn to_h3_response(&self) -> Response<Bytes> {
+    fn to_h3_response(&self) -> Response<Full<Bytes>> {
         let (status, message) = match self {
             Self::NotFound => (StatusCode::NOT_FOUND, "Not found".to_string()),
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()),
@@ -126,10 +126,10 @@ fn json_response(status: StatusCode, value: &serde_json::Value) -> HttpResponse 
 }
 
 #[cfg(feature = "https")]
-fn json_response_bytes(status: StatusCode, value: &serde_json::Value) -> Response<Bytes> {
+fn json_response_bytes(status: StatusCode, value: &serde_json::Value) -> Response<Full<Bytes>> {
     let body = serde_json::to_vec(value).unwrap_or_else(|_| b"{}".to_vec());
 
-    let mut response = Response::new(Bytes::from(body));
+    let mut response = Response::new(Full::new(Bytes::from(body)));
     *response.status_mut() = status;
     response.headers_mut().insert(
         CONTENT_TYPE,
@@ -249,7 +249,7 @@ async fn handle_request(
 async fn handle_h3_request(
     tokens: Arc<RwLock<HashSet<String>>>,
     req: Request<mechanics_http_server::H3RequestBody>,
-) -> Result<Response<Bytes>, Infallible> {
+) -> Result<Response<Full<Bytes>>, Infallible> {
     if req.method() != Method::POST || req.uri().path() != "/api/v1/mechanics" {
         return Ok(ApiError::NotFound.to_h3_response());
     }

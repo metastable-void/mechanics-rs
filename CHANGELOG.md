@@ -9,6 +9,31 @@ this crate adheres to
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-05-14
+
+### Fixed
+- `handle_h3_request` and `ApiError::to_h3_response` now return
+  `Response<Full<Bytes>>` instead of `Response<Bytes>`, matching
+  the `RespBody: http_body::Body<Data = Bytes>` bound on
+  `mhs::Http3Server::start`. The bare-`Bytes` return type
+  compiled in 0.5.3 only because the `https` feature was non-
+  default and pre-landing's `cargo check --workspace` never
+  reached the H3 service-construction site — exactly the same
+  gap that hid the 0.5.2 regression. With `https` now in the
+  default feature set (0.5.3) and `mechanics-core/mime` enabled
+  explicitly per the workspace's default-features-false
+  convention, pre-landing now compiles this whole path on every
+  run.
+
+### Changed
+- Mechanics's `mechanics-core` dep line now sets
+  `default-features = false` and lists every module feature
+  explicitly (`rand`, `encoding`, `html`, `console`, `url`,
+  `mime`). This is a workspace-discipline change with no
+  observable behaviour shift — the same set of modules is
+  available to the JS realm, just declared at the dep site
+  rather than inherited from mechanics-core's defaults.
+
 ## [0.5.3] - 2026-05-14
 
 ### Fixed
