@@ -9,6 +9,18 @@ this crate adheres to
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-05-14
+
+### Fixed
+- `handle_h3_request` now takes
+  `Request<mechanics_http_server::H3RequestBody>` instead of
+  `Request<()>`, matching the `Http3Server::start` service
+  contract that `mhs 0.1.3` switched to (`http_body::Body`
+  streaming bodies). `mechanics 0.5.2` failed to compile
+  against `mhs 0.1.3` because the type-signature update never
+  made it into the consumer; the broken release shipped to
+  crates.io and is superseded by this patch.
+
 ## [0.5.2] - 2026-05-14
 
 ### Added

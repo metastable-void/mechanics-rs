@@ -248,7 +248,7 @@ async fn handle_request(
 #[cfg(feature = "https")]
 async fn handle_h3_request(
     tokens: Arc<RwLock<HashSet<String>>>,
-    req: Request<()>,
+    req: Request<mechanics_http_server::H3RequestBody>,
 ) -> Result<Response<Bytes>, Infallible> {
     if req.method() != Method::POST || req.uri().path() != "/api/v1/mechanics" {
         return Ok(ApiError::NotFound.to_h3_response());
