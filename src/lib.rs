@@ -511,19 +511,12 @@ impl MechanicsServer {
                         Ok::<_, std::io::Error>(())
                     };
 
-                    if let Some(mut h3_handle) = h3_handle {
-                        tokio::select! {
-                            tcp_result = tcp_task => {
-                                h3_handle.shutdown();
-                                tcp_result
-                            }
-                            h3_result = &mut h3_handle => {
-                                h3_result.map_err(std::io::Error::other)
-                            }
-                        }
-                    } else {
-                        tcp_task.await
+                    if let Some(h3_handle) = h3_handle {
+                        tokio::spawn(async move {
+                            let _ = h3_handle.await;
+                        });
                     }
+                    tcp_task.await
                 })
             })?;
 

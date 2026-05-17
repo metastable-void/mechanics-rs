@@ -9,6 +9,11 @@ this crate adheres to
 
 ## [Unreleased]
 
+### Fixed
+- `MechanicsServer::run_tls_with_h3` now runs the optional H3
+  sidecar independently from the TCP+TLS accept loop. A stopped
+  H3 sidecar no longer tears down the TCP listener.
+
 ## [0.5.4] - 2026-05-14
 
 ### Fixed
